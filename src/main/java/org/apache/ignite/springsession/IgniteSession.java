@@ -27,7 +27,7 @@ public final class IgniteSession implements ExpiringSession {
 
     @Override
     public <T> T getAttribute(String attributeName) {
-        return this.delegate.getAttribute(attributeName);
+        return (T) this.delegate.getAttribute(attributeName);
     }
 
     @Override

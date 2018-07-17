@@ -3,20 +3,20 @@
 [Spring Session](https://github.com/spring-projects/spring-session) Extension
 --------------------------------
 
-Spring Session Ignite is a [Spring Session](https://github.com/spring-projects/spring-session) extension that uses [Apache Ignite](https://ignite.apache.org/) for session storage and replication.
+Spring Session Ignite is a [Spring Session](https://github.com/spring-projects/spring-session) extension that uses [Apache Ignite](https://ignite.apache.org/) for session storage and replication via REST.
 
 ## How to build
 --------------------------------
 * Clone this repository
 * Run ``` ./gradlew clean install ``` in the project folder to build the project and install it to local Maven repo.
 
-## Add `spring-session-ignite` as a dependency to your project using:
+## Add `spring-session-ignite-rest` as a dependency to your project using:
 
 ##### Maven
 ```xml
 <dependency>
     <groupId>com.apache.ignite</groupId>
-    <artifactId>spring-session-ignite</artifactId>
+    <artifactId>spring-session-ignite-rest</artifactId>
     <version>1.0</version>
 </dependency>
 ```

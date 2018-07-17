@@ -14,20 +14,58 @@ import org.springframework.util.StringUtils;
 @Configuration
 public class IgniteRestHttpSessionConfiguration extends SpringHttpSessionConfiguration implements ImportAware {
 
-    private static String sessionCacheName = IgniteRestSessionRepository.DFLT_SESSION_STORAGE_NAME;
+    private String sessionCacheName = IgniteRestSessionRepository.DFLT_SESSION_STORAGE_NAME;
 
-    private static Integer maxInactiveIntervalInSeconds = MapSession.DEFAULT_MAX_INACTIVE_INTERVAL_SECONDS;
+    private Integer maxInactiveIntervalInSeconds = MapSession.DEFAULT_MAX_INACTIVE_INTERVAL_SECONDS;
 
-    private static String igniteAddress = IgniteRestSessionRepository.DFLT_IGNITE_ADDRESS;
+    private String igniteAddress = IgniteRestSessionRepository.DFLT_IGNITE_ADDRESS;
 
-    private static String ignitePort = IgniteRestSessionRepository.DFLT_IGNITE_PORT;
+    private String ignitePort = IgniteRestSessionRepository.DFLT_IGNITE_PORT;
+
+    private String igniteConnection;
 
     @Bean
     public IgniteRestSessionRepository repository(/*@Value("$(ignite.ip.url)") final String ip, @Value("$(ignite.port") final String port*/) {
-        IgniteRestSessionRepository repository = new IgniteRestSessionRepository(igniteAddress, ignitePort);
-        repository.setSessionCacheName(sessionCacheName);
+        IgniteRestSessionRepository repository = new IgniteRestSessionRepository();
+
+        if (StringUtils.hasText(igniteConnection)) {
+            assert igniteConnection.contains(":");
+            String[] connection = igniteConnection.split(":");
+            assert connection.length == 2;
+            String address = connection[0];
+            String port = connection[1];
+
+            repository.setIp(address);
+            repository.setPort(port);
+        }
+        else {
+            repository.setIp(this.igniteAddress);
+            repository.setPort(this.ignitePort);
+        }
+
+        repository.setSessionCacheName(this.sessionCacheName);
         repository.setDefaultMaxInactiveInterval(maxInactiveIntervalInSeconds);
         return repository;
+    }
+
+    public void setSessionCacheName(String sessionCacheName) {
+        this.sessionCacheName = sessionCacheName;
+    }
+
+    public void setMaxInactiveIntervalInSeconds(Integer maxInactiveIntervalInSeconds) {
+        this.maxInactiveIntervalInSeconds = maxInactiveIntervalInSeconds;
+    }
+
+    public void setIgniteAddress(String igniteAddress) {
+        this.igniteAddress = igniteAddress;
+    }
+
+    public void setIgnitePort(String ignitePort) {
+        this.ignitePort = ignitePort;
+    }
+
+    public void setIgniteConnection(String igniteConnection) {
+        this.igniteConnection = igniteConnection;
     }
 
     @Override

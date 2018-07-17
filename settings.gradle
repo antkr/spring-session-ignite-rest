@@ -1,4 +1,4 @@
-rootProject.name = 'spring-session-ignite'
+rootProject.name = 'spring-session-ignite-rest'
 
 FileTree buildFiles = fileTree(rootDir) {
     include '**/*.gradle'

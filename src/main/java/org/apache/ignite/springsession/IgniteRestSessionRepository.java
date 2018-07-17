@@ -50,16 +50,28 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     private static final String PARTITIONED = "PARTITIONED";
 
-    private static String ip;
+    private String ip;
 
-    private static String port;
+    private String port;
 
     private String sessionCacheName;
 
     private Integer defaultMaxInactiveInterval;
 
+    public IgniteRestSessionRepository() {
+
+    }
+
     public IgniteRestSessionRepository(String ip, String port) {
         this.ip = ip;
+        this.port = port;
+    }
+
+    public void setIp(String ip) {
+        this.ip = ip;
+    }
+
+    public void setPort(String port) {
         this.port = port;
     }
 
@@ -122,6 +134,10 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     @Override public IgniteSession createSession() {
         IgniteSession session = new IgniteSession();
+
+        if (this.defaultMaxInactiveInterval != null) {
+            session.setMaxInactiveIntervalInSeconds(this.defaultMaxInactiveInterval);
+        }
 
         return session;
     }

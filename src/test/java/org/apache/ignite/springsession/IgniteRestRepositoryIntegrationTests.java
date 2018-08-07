@@ -1,9 +1,7 @@
 package org.apache.ignite.springsession;
 
-import java.util.concurrent.TimeUnit;
 import org.apache.ignite.springsession.config.annotation.web.http.EnableRestIgniteHttpSession;
 import org.apache.ignite.springsession.config.annotation.web.http.IgniteRestHttpSessionConfiguration;
-import org.apache.ignite.springsession.model.AuthContext;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +9,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
+
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

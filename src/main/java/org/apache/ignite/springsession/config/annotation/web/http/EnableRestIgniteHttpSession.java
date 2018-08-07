@@ -21,8 +21,5 @@ public @interface EnableRestIgniteHttpSession {
 
     String sessionCacheName() default IgniteRestSessionRepository.DFLT_SESSION_STORAGE_NAME;
 
-    String igniteAddress() default IgniteRestSessionRepository.DFLT_IGNITE_ADDRESS;
-
-    String ignitePort() default IgniteRestSessionRepository.DFLT_IGNITE_PORT;
-
+    String url() default IgniteRestSessionRepository.DFLT_URL;
 }

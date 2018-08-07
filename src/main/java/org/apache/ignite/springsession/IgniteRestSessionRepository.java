@@ -4,13 +4,6 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import javax.annotation.PostConstruct;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.http.HttpResponse;
@@ -26,12 +19,17 @@ import org.springframework.core.serializer.support.SerializingConverter;
 import org.springframework.session.SessionRepository;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
+
 @Component
 public class IgniteRestSessionRepository implements SessionRepository<IgniteSession> {
 
-    public final static String DFLT_IGNITE_ADDRESS = "localhost";
-
-    public final static String DFLT_IGNITE_PORT = "8080";
+    public final static String DFLT_URL = "http://localhost:8080";
 
     public static final String DFLT_SESSION_STORAGE_NAME = "spring.session.cache";
 
@@ -57,9 +55,7 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     private static final String PARTITIONED = "PARTITIONED";
 
-    private String ip;
-
-    private String port;
+    private String url = DFLT_URL;
 
     private String sessionCacheName;
 
@@ -73,32 +69,27 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     }
 
-    public IgniteRestSessionRepository(String ip, String port) {
-        this.ip = ip;
-        this.port = port;
+    public IgniteRestSessionRepository(String url) {
+        this.url = url;
     }
 
-    public void setIp(String ip) {
-        this.ip = ip;
-    }
-
-    public void setPort(String port) {
-        this.port = port;
+    public void setUrl(String url) {
+        this.url = url;
     }
 
     private static GenericConversionService createDefaultConversionService() {
         GenericConversionService converter = new GenericConversionService();
         converter.addConverter(IgniteSession.class, byte[].class,
-            new SerializingConverter());
+                new SerializingConverter());
         converter.addConverter(byte[].class, IgniteSession.class,
-            new DeserializingConverter());
+                new DeserializingConverter());
         return converter;
-}
+    }
 
     private String serialize(IgniteSession attributeValue) {
         byte[] value = (byte[]) this.conversionService.convert(attributeValue,
-            TypeDescriptor.valueOf(IgniteSession.class),
-            TypeDescriptor.valueOf(byte[].class));
+                TypeDescriptor.valueOf(IgniteSession.class),
+                TypeDescriptor.valueOf(byte[].class));
         return Hex.encodeHexString(value);
     }
 
@@ -106,8 +97,8 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         if ("null".equals(value))
             return null;
         return (IgniteSession) this.conversionService.convert(Hex.decodeHex(value.toCharArray()),
-            TypeDescriptor.valueOf(byte[].class),
-            TypeDescriptor.valueOf(IgniteSession.class));
+                TypeDescriptor.valueOf(byte[].class),
+                TypeDescriptor.valueOf(IgniteSession.class));
     }
 
     @PostConstruct
@@ -118,49 +109,22 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
         this.conversionService = createDefaultConversionService();
 
-        CloseableHttpClient client = getHttpClient(this.ip, this.port);
+        CloseableHttpClient client = getHttpClient();
 
-        HttpResponse res;
-
-        try {
-            Map<String, String> ss = new HashMap<String, String>();
-            ss.put(CMD, CREATE_CACHE);
-            ss.put(CACHE_NAME, sessionCacheName);
-            ss.put(CACHE_TEMPLATE, REPLICATED);
-            res = client.execute(buildCacheRequest("localhost", "8080", ss));
-
-            try {
-                assert res.getStatusLine().getStatusCode() == 200;
-            }
-            finally {
-                ((CloseableHttpResponse)res).close();
-            }
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
-        finally {
-            try {
-                client.close();
-            }
-            catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+        sendCommandRequest(REPLICATED, client, CREATE_CACHE, CACHE_TEMPLATE);
     }
 
-    private CloseableHttpClient getHttpClient(String ip, String port) {
-        CloseableHttpClient client = HttpClients.custom().build();
-        return client;
+    private CloseableHttpClient getHttpClient() {
+        return HttpClients.custom().build();
     }
 
-    private HttpGet buildCacheRequest(String host, String port, Map<String, String> params) throws Exception {
-        StringBuilder sb = new StringBuilder("http://" + host + ":" + port + "/ignite?");
+    private HttpGet buildCacheRequest(String urlAddress, Map<String, String> params) throws Exception {
+        StringBuilder sb = new StringBuilder(urlAddress + "/ignite?");
 
         String prefix = "";
         for (Map.Entry<String, String> e : params.entrySet()) {
             sb.append(prefix);
-            prefix="&";
+            prefix = "&";
             sb.append(e.getKey()).append('=').append(e.getValue());
         }
 
@@ -173,7 +137,8 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         this.sessionCacheName = sessionCacheName;
     }
 
-    @Override public IgniteSession createSession() {
+    @Override
+    public IgniteSession createSession() {
         IgniteSession session = new IgniteSession();
 
         if (this.defaultMaxInactiveInterval != null)
@@ -182,8 +147,9 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         return session;
     }
 
-    @Override public void save(IgniteSession session) {
-        CloseableHttpClient client = getHttpClient(this.ip, this.port);
+    @Override
+    public void save(IgniteSession session) {
+        CloseableHttpClient client = getHttpClient();
 
         HttpResponse res;
 
@@ -194,31 +160,28 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
             ss.put(KEY, session.getId());
             ss.put(VALUE, serialize(session));
 
-            res = client.execute(buildCacheRequest(this.ip, this.port, ss));
+            res = client.execute(buildCacheRequest(this.url, ss));
 
             try {
                 assert res.getStatusLine().getStatusCode() == 200;
+            } finally {
+                ((CloseableHttpResponse) res).close();
             }
-            finally {
-                ((CloseableHttpResponse)res).close();
-            }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
-        }
-        finally {
+        } finally {
             try {
                 client.close();
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    @Override public IgniteSession getSession(String id) {
+    @Override
+    public IgniteSession getSession(String id) {
 
-        CloseableHttpClient client = getHttpClient(this.ip, this.port);
+        CloseableHttpClient client = getHttpClient();
 
         Map<String, String> ss = new HashMap<String, String>();
         ss.put(CMD, GET);
@@ -229,7 +192,7 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
         IgniteSession session = null;
         try {
-            res = client.execute(buildCacheRequest("localhost", "8080", ss));
+            res = client.execute(buildCacheRequest(this.url, ss));
             try {
                 assert res.getStatusLine().getStatusCode() == 200;
 
@@ -240,17 +203,14 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
                     JsonNode node = mapper.readTree(is).get("response");
                     session = deserialize(node.asText());
-                }
-                finally {
-                    if (is != null )
+                } finally {
+                    if (is != null)
                         is.close();
                 }
+            } finally {
+                ((CloseableHttpResponse) res).close();
             }
-            finally {
-                ((CloseableHttpResponse)res).close();
-            }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -265,33 +225,33 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         return session;
     }
 
-    @Override public void delete(String id) {
-        CloseableHttpClient client = getHttpClient(this.ip, this.port);
+    @Override
+    public void delete(String id) {
+        CloseableHttpClient client = getHttpClient();
 
+        sendCommandRequest(id, client, DELETE, KEY);
+    }
+
+    private void sendCommandRequest(String id, CloseableHttpClient client, String delete, String key) {
         HttpResponse res;
-
         try {
             Map<String, String> ss = new HashMap<String, String>();
-            ss.put(CMD, DELETE);
+            ss.put(CMD, delete);
             ss.put(CACHE_NAME, sessionCacheName);
-            ss.put(KEY, id);
-            res = client.execute(buildCacheRequest("localhost", "8080", ss));
+            ss.put(key, id);
+            res = client.execute(buildCacheRequest(this.url, ss));
 
             try {
                 assert res.getStatusLine().getStatusCode() == 200;
+            } finally {
+                ((CloseableHttpResponse) res).close();
             }
-            finally {
-                ((CloseableHttpResponse)res).close();
-            }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
-        }
-        finally {
+        } finally {
             try {
                 client.close();
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
@@ -299,14 +259,5 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     public void setDefaultMaxInactiveInterval(Integer dfltMaxInactiveInterval) {
         defaultMaxInactiveInterval = dfltMaxInactiveInterval;
-    }
-
-    private String readStream(InputStream is) throws IOException {
-        ByteArrayOutputStream result = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int length;
-        while ((length = is.read(buffer)) != -1)
-            result.write(buffer, 0, length);
-        return result.toString("UTF-8");
     }
 }

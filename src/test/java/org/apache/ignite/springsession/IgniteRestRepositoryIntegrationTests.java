@@ -1,7 +1,6 @@
 package org.apache.ignite.springsession;
 
 import org.apache.ignite.springsession.config.annotation.web.http.EnableRestIgniteHttpSession;
-import org.apache.ignite.springsession.config.annotation.web.http.IgniteRestHttpSessionConfiguration;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,9 +22,8 @@ public class IgniteRestRepositoryIntegrationTests {
     private IgniteRestSessionRepository repository;
 
     @Configuration
-    @EnableRestIgniteHttpSession(sessionCacheName = "session.cache.v2", igniteAddress = "localhost", ignitePort = "8080")
-    static class SessionConfig extends IgniteRestHttpSessionConfiguration {
-
+    @EnableRestIgniteHttpSession(sessionCacheName = "session.cache.v2", url = "http://localhost:8080/")
+    static class TestConfiguration {
     }
 
     @Test

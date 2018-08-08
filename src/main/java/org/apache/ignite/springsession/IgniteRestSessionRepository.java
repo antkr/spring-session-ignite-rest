@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -23,8 +24,6 @@ import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class IgniteRestSessionRepository implements SessionRepository<IgniteSession> {
@@ -73,10 +72,6 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         this.url = url;
     }
 
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
     private static GenericConversionService createDefaultConversionService() {
         GenericConversionService converter = new GenericConversionService();
         converter.addConverter(IgniteSession.class, byte[].class,
@@ -109,32 +104,7 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
         this.conversionService = createDefaultConversionService();
 
-        CloseableHttpClient client = getHttpClient();
-
-        sendCommandRequest(REPLICATED, client, CREATE_CACHE, CACHE_TEMPLATE);
-    }
-
-    private CloseableHttpClient getHttpClient() {
-        return HttpClients.custom().build();
-    }
-
-    private HttpGet buildCacheRequest(String urlAddress, Map<String, String> params) throws Exception {
-        StringBuilder sb = new StringBuilder(urlAddress + "/ignite?");
-
-        String prefix = "";
-        for (Map.Entry<String, String> e : params.entrySet()) {
-            sb.append(prefix);
-            prefix = "&";
-            sb.append(e.getKey()).append('=').append(e.getValue());
-        }
-
-        URL url = new URL(sb.toString());
-
-        return new HttpGet(url.toURI());
-    }
-
-    public void setSessionCacheName(String sessionCacheName) {
-        this.sessionCacheName = sessionCacheName;
+        executeSessionCacheCommand(CREATE_CACHE, CACHE_TEMPLATE, REPLICATED);
     }
 
     @Override
@@ -149,102 +119,69 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
 
     @Override
     public void save(IgniteSession session) {
-        CloseableHttpClient client = getHttpClient();
-
-        HttpResponse res;
-
-        try {
-            Map<String, String> ss = new HashMap<String, String>();
-            ss.put(CMD, PUT);
-            ss.put(CACHE_NAME, sessionCacheName);
-            ss.put(KEY, session.getId());
-            ss.put(VALUE, serialize(session));
-
-            res = client.execute(buildCacheRequest(this.url, ss));
-
-            try {
-                assert res.getStatusLine().getStatusCode() == 200;
-            } finally {
-                ((CloseableHttpResponse) res).close();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                client.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    @Override
-    public IgniteSession getSession(String id) {
-
-        CloseableHttpClient client = getHttpClient();
-
-        Map<String, String> ss = new HashMap<String, String>();
-        ss.put(CMD, GET);
-        ss.put(CACHE_NAME, sessionCacheName);
-        ss.put(KEY, id);
-
-        HttpResponse res;
-
-        IgniteSession session = null;
-        try {
-            res = client.execute(buildCacheRequest(this.url, ss));
-            try {
-                assert res.getStatusLine().getStatusCode() == 200;
-
-                InputStream is = null;
-
-                try {
-                    is = res.getEntity().getContent();
-
-                    JsonNode node = mapper.readTree(is).get("response");
-                    session = deserialize(node.asText());
-                } finally {
-                    if (is != null)
-                        is.close();
-                }
-            } finally {
-                ((CloseableHttpResponse) res).close();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        if (session == null)
-            return null;
-
-        if (session.isExpired()) {
-            delete(id);
-            return null;
-        }
-
-        return session;
+        executeSessionCacheCommand(PUT, KEY, session.getId(), VALUE, serialize(session));
     }
 
     @Override
     public void delete(String id) {
-        CloseableHttpClient client = getHttpClient();
-
-        sendCommandRequest(id, client, DELETE, KEY);
+        executeSessionCacheCommand(DELETE, KEY, id);
     }
 
-    private void sendCommandRequest(String id, CloseableHttpClient client, String delete, String key) {
-        HttpResponse res;
-        try {
-            Map<String, String> ss = new HashMap<String, String>();
-            ss.put(CMD, delete);
-            ss.put(CACHE_NAME, sessionCacheName);
-            ss.put(key, id);
-            res = client.execute(buildCacheRequest(this.url, ss));
-
-            try {
+    @Override
+    public IgniteSession getSession(final String id) {
+        ResponseHandler<IgniteSession> hnd = new ResponseHandler<IgniteSession>() {
+            @Override
+            public IgniteSession handleResponse(HttpResponse res) throws IOException {
                 assert res.getStatusLine().getStatusCode() == 200;
-            } finally {
-                ((CloseableHttpResponse) res).close();
+
+                InputStream is = null;
+                try {
+                    is = res.getEntity().getContent();
+                    JsonNode node = mapper.readTree(is).get("response");
+                    IgniteSession session = deserialize(node.asText());
+
+                    if (session == null)
+                        return null;
+
+                    if (session.isExpired()) {
+                        delete(id);
+                        return null;
+                    }
+
+                    return session;
+                } catch (DecoderException e) {
+                    e.printStackTrace();
+                } finally {
+                    if (is != null)
+                        is.close();
+                }
+
+                return null;
+            }
+        };
+
+        return executeSessionCacheCommand(hnd, GET, KEY, id);
+    }
+
+    private CloseableHttpClient createHttpClient() {
+        return HttpClients.custom().build();
+    }
+
+    private void executeSessionCacheCommand(String command, String... args) {
+        executeSessionCacheCommand(null, command, args);
+    }
+
+    private <T> T executeSessionCacheCommand(ResponseHandler<? extends T> hnd, String command, String... args) {
+        CloseableHttpClient client = createHttpClient();
+        try {
+            HttpGet req = buildCacheCommandRequest(this.url, command, this.sessionCacheName, args);
+
+            if (hnd != null)
+                return client.execute(req, hnd);
+            else {
+                CloseableHttpResponse res = client.execute(req);
+                assert res.getStatusLine().getStatusCode() == 200;
+                res.close();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -255,6 +192,39 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
                 e.printStackTrace();
             }
         }
+
+        return null;
+    }
+
+    private HttpGet buildCacheCommandRequest(String urlAddr, String command, String cacheName,
+                                             String... params) throws Exception {
+        StringBuilder sb = new StringBuilder(urlAddr).append("/ignite");
+        sb.append("?").append(CMD).append('=').append(command);
+        sb.append("&").append(CACHE_NAME).append('=').append(cacheName);
+
+        if (params.length % 2 != 0)
+            throw new IllegalArgumentException("Number of parameters should be even");
+
+        for (int i = 0; i < params.length; i += 2) {
+            sb.append('&');
+
+            String key = params[i];
+            String val = params[i + 1];
+
+            sb.append(key).append('=').append(val);
+        }
+
+        URL url = new URL(sb.toString());
+
+        return new HttpGet(url.toURI());
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public void setSessionCacheName(String sessionCacheName) {
+        this.sessionCacheName = sessionCacheName;
     }
 
     public void setDefaultMaxInactiveInterval(Integer dfltMaxInactiveInterval) {

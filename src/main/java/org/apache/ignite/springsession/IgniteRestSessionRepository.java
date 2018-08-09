@@ -7,11 +7,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.core.convert.support.GenericConversionService;
@@ -24,6 +28,8 @@ import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 public class IgniteRestSessionRepository implements SessionRepository<IgniteSession> {
@@ -174,7 +180,7 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
     private <T> T executeSessionCacheCommand(ResponseHandler<? extends T> hnd, String command, String... args) {
         CloseableHttpClient client = createHttpClient();
         try {
-            HttpGet req = buildCacheCommandRequest(this.url, command, this.sessionCacheName, args);
+            HttpUriRequest req = buildCacheCommandRequest(this.url, command, this.sessionCacheName, args);
 
             if (hnd != null)
                 return client.execute(req, hnd);
@@ -196,27 +202,27 @@ public class IgniteRestSessionRepository implements SessionRepository<IgniteSess
         return null;
     }
 
-    private HttpGet buildCacheCommandRequest(String urlAddr, String command, String cacheName,
-                                             String... params) throws Exception {
-        StringBuilder sb = new StringBuilder(urlAddr).append("/ignite");
-        sb.append("?").append(CMD).append('=').append(command);
-        sb.append("&").append(CACHE_NAME).append('=').append(cacheName);
-
+    private HttpUriRequest buildCacheCommandRequest(String urlAddr, String command, String cacheName,
+                                                    String... params) throws Exception {
         if (params.length % 2 != 0)
             throw new IllegalArgumentException("Number of parameters should be even");
 
-        for (int i = 0; i < params.length; i += 2) {
-            sb.append('&');
+        List<NameValuePair> paramList = new ArrayList<NameValuePair>(params.length / 2);
 
+        for (int i = 0; i < params.length; i += 2) {
             String key = params[i];
             String val = params[i + 1];
 
-            sb.append(key).append('=').append(val);
+            paramList.add(new BasicNameValuePair(key, val));
         }
 
-        URL url = new URL(sb.toString());
+        URL url = new URL(urlAddr + "/ignite" +
+                "?" + CMD + '=' + command +
+                "&" + CACHE_NAME + '=' + cacheName);
+        HttpPost req = new HttpPost(url.toURI());
+        req.setEntity(new UrlEncodedFormEntity(paramList));
 
-        return new HttpGet(url.toURI());
+        return req;
     }
 
     public void setUrl(String url) {
